@@ -1,0 +1,346 @@
+~unit cowsay type=exe;
+
+
+~import Console;
+~import std::string;
+
+~import Lp3::Exception;
+~import Lp3::Engine::Gfx::BitmapReader;
+~import Lp3::Engine::Gfx::Image;
+~import Lp3::Engine::Gfx::Geometry::Coordinates2d;
+~import Lp3::Engine::Gfx::Pixel;
+~import Lp3::Engine::Gfx::PixelImage;
+~import Lp3::Engine::Resources::EnvVars;
+~import Lp3::Engine::Resources::InputFileStream;
+~import Lp3::Engine::Resources::ReadStreamPtr;
+~import Lp3::Engine::Gfx::Pixel;
+
+~block "cpp":=
+
+#include <thread>
+#include <windows.h>
+#include <iostream>
+#include <chrono>
+#include <thread>
+#include <cmath>
+#include <sstream>
+#include <time.h>
+#include <vector>
+
+#pragma comment (lib, "user32.lib")
+#pragma comment (lib, "Gdi32.lib")
+
+using namespace std;
+
+
+class Console
+{
+private:
+    HDC dc;
+
+public:
+
+    Console(HDC dc, unsigned int startX, unsigned int startY)
+    :   dc(dc),
+        startX(startX),
+        startY(startY)
+    {}
+
+    unsigned int startX;
+    unsigned int startY;
+
+    void nPSet(const unsigned int x, const unsigned int y, const Pixel & rgb)
+    {
+        if (rgb.Alpha < 128) {
+            return;
+        }
+        COLORREF COLOR= RGB(rgb.Red, rgb.Green, rgb.Blue);
+        unsigned int _x = x * 2;
+        unsigned int _y = y * 2;
+        SetPixel(dc, _x + 25, _y + 40, COLOR);
+        SetPixel(dc, _x + 25 + 1, _y + 40, COLOR);
+        SetPixel(dc, _x + 25, _y + 40 + 1, COLOR);
+        SetPixel(dc, _x + 25 + 1, _y + 40 + 1, COLOR);
+    }
+
+    virtual void PSet(const unsigned int x, const unsigned int y,
+                      const Pixel & rgb)
+    {
+        if (rgb.Alpha < 128) {
+            return;
+        }
+        COLORREF COLOR= RGB(rgb.Red, rgb.Green, rgb.Blue);
+        SetPixel(dc, x + startX, y + startY, COLOR);
+    }
+};
+
+
+struct ConsoleStuff
+{
+
+    HANDLE consoleHandle;
+    CONSOLE_FONT_INFO font;
+    COORD fontSize;
+
+    ConsoleStuff() {
+        consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (INVALID_HANDLE_VALUE == consoleHandle)
+        {
+            std::cerr << "Failure to get console handle.\n";
+            throw Lp3::Exception("Coudn't get console handle.");
+        }
+
+        if (0 == GetCurrentConsoleFont(consoleHandle, TRUE, &font))
+        {
+            std::cerr << "Failure to get console font.\n";
+            throw Lp3::Exception("Coudn't get console font.");
+        }
+
+        fontSize = GetConsoleFontSize(consoleHandle, font.nFont);
+        if (fontSize.X == 0 || fontSize.Y == 0)
+        {
+            std::cerr << "Failure to get console font size.\n";
+            throw Lp3::Exception("Coudn't get console font size.\n");
+        }
+    }
+
+    std::pair<int, int> GetCoordinates(int LinesToSkip)
+    {
+        auto info = GetInfo();
+        int X = info.dwCursorPosition.X * this->fontSize.X;
+        // The stuff windows returns is relative to the entire console buffer.
+        // To correct it, we take what appears to be the height of the visible
+        // window and subtract it from the overall position, getting us where
+        // we want to be.
+        auto un = info.srWindow.Bottom - (info.srWindow.Bottom - info.srWindow.Top);
+        int Y = ((info.dwCursorPosition.Y - LinesToSkip) - un);
+        Y = Y * this->fontSize.Y;
+
+        X += info.srWindow.Left;
+        return std::make_pair(X, Y);
+    }
+
+    CONSOLE_SCREEN_BUFFER_INFO GetInfo()
+    {
+        CONSOLE_SCREEN_BUFFER_INFO info;
+        if (0 == GetConsoleScreenBufferInfo(this->consoleHandle, &info))
+        {
+            std::cerr << "Failure to get buffer info.\n";
+            throw Lp3::Exception("Coudn't get buffer info.");
+        }
+        return info;
+    }
+
+    Coordinates2d<size_t> GetFontSize()
+    {
+        return { fontSize.X, fontSize.Y };
+    }
+
+    Coordinates2d<size_t> ToPixelCoordinates(Coordinates2d<size_t> textCoord)
+    {
+        auto info = GetInfo();
+        int X = textCoord.X * this->fontSize.X;
+        X += info.srWindow.Left;
+        // The stuff windows returns is relative to the entire console buffer.
+        // To correct it, we take what appears to be the height of the visible
+        // window and subtract it from the overall position, getting us where
+        // we want to be.
+        auto adjust = info.srWindow.Bottom
+                        - (info.srWindow.Bottom - info.srWindow.Top);
+        int Y = textCoord.Y - adjust;
+        Y = Y * this->fontSize.Y;
+
+        return { X, Y };
+    }
+
+
+    Coordinates2d<size_t> GetTextCoordinates()
+    {
+        auto info = GetInfo();
+        return { info.dwCursorPosition.X, info.dwCursorPosition.Y };
+    }
+
+    size_t GetColumnWidth()
+    {
+        auto info = GetInfo();
+        return info.srWindow.Right - info.srWindow.Left;
+    }
+};
+
+PixelImage loadImage(const string & fileName)
+{
+    ReadStreamPtr input(new InputFileStream(fileName.c_str()));
+    BitmapReader reader(input);
+    PixelImage image(reader.Width(), reader.Height());
+    Pixel colorKey(255, 0, 255, 0);
+    reader.Read(image, colorKey);
+    return image;
+}
+
+void drawCow(Console & console, const Coordinates2d<size_t> startCoordinates,
+             const PixelImage & image)
+{
+    for (size_t y = 0; y < image.Height(); ++ y) {
+        for (size_t x = 0; x < image.Width(); ++ x) {
+            const auto pixel = image.GetPixel(x, y);
+            //std::cout << "(" << (int) pixel.Red << ", "
+            //    << (int) pixel.Green << ", " << (int) pixel.Blue << ")\n";
+            console.PSet(startCoordinates.X + x, startCoordinates.Y + y, pixel);
+        }
+    }
+}
+
+void wordBubble(const string & text, const int desiredWidth)
+{
+    std::istringstream inputStream(text);
+    std::vector<string> words{std::istream_iterator<string>(inputStream),
+                              std::istream_iterator<string>()};
+
+    int index = 0;
+    const int width = desiredWidth - 10;
+
+    auto startLine = [&]() {
+        std::cout <<  "   | ";
+        index = 0;
+    };
+
+    auto endLine = [&]() {
+        auto size = width - index;
+        if (size < 0)
+        {
+            size = 0;
+        }
+        std::cout << string(size, ' ');
+        std::cout <<  " |\n";
+        index = 0;
+    };
+
+    auto print = [&](string & w)
+    {
+        if (index > 0 && (index + w.length()) >= width)
+        {
+            if (w == " ")
+            {
+                return;  // Skip spaces.
+            }
+            endLine();
+            startLine();
+        }
+        std::cout << w;
+        index += w.size();
+    };
+
+
+    std::cout << "   .-" << string(width, '-') << "-.\n";
+    startLine();
+    for (int i = 0; i < words.size(); ++i)
+    {
+        if (i > 0) {
+            print(string{" "});
+        }
+        print(words[i]);
+    }
+    endLine();
+    const auto wl = (width / 2) - 2;
+    std::cout << "   '-" << string(wl, '-')
+              << ". ."
+              << string(width - wl - 3, '-') << "-'\n";
+    std::cout << "     " << string(wl, ' ');
+    std::cout << "|/\n";
+
+}
+
+void cowsay(Console & drawConsole, const string & name, const string & text)
+{
+    const auto image = loadImage(name + ".bmp");
+
+    ConsoleStuff console;
+
+    auto wordWidth = image.Width() / console.GetFontSize().X;
+    if (text.size() < wordWidth)
+    {
+        wordWidth = text.size();
+    }
+    wordBubble(text, (image.Width() / console.GetFontSize().X));
+
+    int linesToSkip = image.Height() / console.GetFontSize().Y;
+    for (size_t n = 0; n < linesToSkip; ++ n) {
+        std::cout << "\n";
+    }
+
+    auto textCoordinates = console.GetTextCoordinates();
+    auto c = console.ToPixelCoordinates({textCoordinates.X,
+                                         textCoordinates.Y - linesToSkip});
+
+    drawCow(drawConsole, c, image);
+}
+
+
+int main(int argc, const char * * argv)
+{
+    if (argc < 2)
+    {
+        std::cerr << "Usage: " << (argc > 0 ? argv[0] : "cscp") << " text" ;
+        return 1;
+    }
+
+    string image = "cow";
+    bool expectImage = false;
+    bool seenImage = false;
+    string text;
+
+    for(int i = 1; i < argc; ++ i)
+    {
+        if (expectImage)
+        {
+            image = argv[i];
+            expectImage = false;
+            seenImage = true;
+        }
+        else
+        {
+            if (!seenImage && strncmp("-c", argv[i], 2) == 0)
+            {
+                if (argc < (i + 2))
+                {
+                    std::cerr << "Error - no cow name found following -c.\n";
+                    return 1;
+                }
+                expectImage = true;
+            }
+            else
+            {
+                if (text.length() > 0)
+                {
+                    text += " ";
+                }
+                text += argv[i];
+            }
+        }
+    }
+
+    char * s = getenv("COWSAY_LOCATION");
+    if (nullptr == s)
+    {
+        std::cerr << "COWSAY_LOCATION environment variable not set.\n";
+        return 1;
+    }
+    EnvVars::Initialize(s);
+
+    HWND myconsole = GetConsoleWindow();
+    HDC mydc = GetDC(myconsole);
+
+    Console console(mydc, 0, 0);
+    int exitCode = 0;
+    try
+    {
+        cowsay(console, image, text);
+    } catch(...)
+    {
+        std::cerr << "Cow error...\n";
+        exitCode = 1;
+    }
+    ReleaseDC(myconsole, mydc);
+
+    return exitCode;
+}
