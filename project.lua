@@ -11,7 +11,7 @@ SimpleProject{
   target="target",
   libShortName="CowsayCP",
   dependencies = {
-    load("Macaroni", "Boost-headers", "1.57"):Target("lib"),
+    load("Macaroni", "Boost-headers", "1.58"):Target("lib"),
     load("Macaroni", "CppStd", "2003"):Target("lib"),
     load("Lp3", "Lp3.Engine.Gfx", "DEV"):Target("lib"),
   },
