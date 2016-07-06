@@ -1,6 +1,8 @@
 Cowsay for Windows
 ==================
 
+[![Build status](https://ci.appveyor.com/api/projects/status/dc5icdm7mwtask05?svg=true)](https://ci.appveyor.com/project/TimSimpson/cpcowsay)
+
 Finally, the best reason to run Linux has arrived on the Windows platform. Wake
 the kids and let them know.
 

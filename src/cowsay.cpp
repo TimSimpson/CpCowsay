@@ -1,23 +1,4 @@
-~unit cowsay type=exe;
-
-
-~import Console;
-~import boost::optional;
-~import std::string;
-
-~import Lp3::Exception;
-~import Lp3::Engine::Gfx::BitmapReader;
-~import Lp3::Engine::Gfx::Image;
-~import Lp3::Engine::Gfx::Geometry::Coordinates2d;
-~import Lp3::Engine::Gfx::Pixel;
-~import Lp3::Engine::Gfx::PixelImage;
-~import Lp3::Engine::Resources::EnvVars;
-~import Lp3::Engine::Resources::InputFileStream;
-~import Lp3::Engine::Resources::ReadStreamPtr;
-~import Lp3::Engine::Gfx::Pixel;
-
-~block "cpp":=
-
+#include <boost/optional.hpp>
 #include <boost/lexical_cast.hpp>
 #include <thread>
 #include <windows.h>
@@ -29,11 +10,34 @@
 #include <time.h>
 #include <vector>
 
+#include <Lp3/Exception.h>
+#include <Lp3/Engine/Gfx/BitmapReader.h>
+#include <Lp3/Engine/Gfx/Image.h>
+#include <Lp3/Engine/Gfx/Geometry.hpp>
+#include <Lp3/Engine/Gfx/Pixel.h>
+#include <Lp3/Engine/Gfx/PixelImage.h>
+#include <Lp3/Engine/Resources/EnvVars.h>
+#include <Lp3/Engine/Resources/InputFileStream.hpp>
+#include <Lp3/Engine/Resources/ReadStreamPtr.h>
+#include <Lp3/Engine/Gfx/Pixel.h>
+
 #pragma comment (lib, "user32.lib")
 #pragma comment (lib, "Gdi32.lib")
 
 using namespace std;
 
+using boost::optional;
+using std::string;
+using Lp3::Exception;
+using Lp3::Engine::Gfx::BitmapReader;
+using Lp3::Engine::Gfx::Image;
+using Lp3::Engine::Gfx::Geometry::Coordinates2d;
+using Lp3::Engine::Gfx::Pixel;
+using Lp3::Engine::Gfx::PixelImage;
+using Lp3::Engine::Resources::EnvVars;
+using Lp3::Engine::Resources::InputFileStream;
+using Lp3::Engine::Resources::ReadStreamPtr;
+using Lp3::Engine::Gfx::Pixel;
 
 class Console
 {
@@ -135,7 +139,7 @@ struct ConsoleStuff
 
     Coordinates2d<size_t> GetFontSize()
     {
-        return { fontSize.X, fontSize.Y };
+        return { size_t(fontSize.X), size_t(fontSize.Y) };
     }
 
     Coordinates2d<size_t> ToPixelCoordinates(Coordinates2d<size_t> textCoord)
@@ -152,14 +156,15 @@ struct ConsoleStuff
         int Y = textCoord.Y - adjust;
         Y = Y * this->fontSize.Y;
 
-        return { X, Y };
+        return { size_t(X), size_t(Y) };
     }
 
 
     Coordinates2d<size_t> GetTextCoordinates()
     {
         auto info = GetInfo();
-        return { info.dwCursorPosition.X, info.dwCursorPosition.Y };
+        return { size_t(info.dwCursorPosition.X),
+                 size_t(info.dwCursorPosition.Y) };
     }
 
     size_t GetColumnWidth()
